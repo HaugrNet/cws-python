@@ -1,6 +1,6 @@
 from zeep import Client
 import hashlib
-
+import datetime
 # Usage Examples
 
 # Connect to the two main webservices, system and share
@@ -90,11 +90,37 @@ print result
 
 BLOB = open('test/plone.pdf', 'rb').read()  # Add a real blob here
 UUID = hashlib.md5(BLOB).hexdigest()
-DATA = dict(accountName="pilz", credential="secret",
-            credentialType="PASSPHRASE", action="ADD", circleId=circle_id,
-            dataId='', typeName='', folderId='',
-            dataName=UUID, data=BLOB
-            )
-result = sharecli.service.processData(DATA)
+# DATA = dict(accountName="pilz", credential="secret",
+#             credentialType="PASSPHRASE", action="ADD", circleId=circle_id,
+#             dataId='', typeName='', folderId='',
+#             dataName=UUID, data=BLOB
+#             )
+# result = sharecli.service.processData(DATA)
+# print result
 
+# Sign a document
+
+DATA = dict(accountName="pilz", credential="secret",
+            credentialType="PASSPHRASE", data=BLOB,
+            expires=datetime.date(datetime.MAXYEAR, 12, 31)
+            )
+result = sharecli.service.sign(DATA)
 print result
+signature = result.signature
+signature = 'B0AEfotILqPDLS6TTjiRvaWH68H4rqbpeajv3nPxE8exknKSQbFPsT+juqIWS29JYZb+3V/zdV5zFcr7/0FFsdsmBJkOBLGr1VN4a9xiPabL6XoVgmyQzKrFy6FMnh7U4k9Rv7UfVv4lMoNQzGy0ZfgtOvqpQ/sVoUVySQXnsxddqvgtzGjmT1wOsgYVtbUb/93BDdEBtJWSQqJlXQC20WTmd8KnzDm/0fi5xq1a51gOh6Lhb9+WiWFK4oLGUcSq3AGTnDx0R1xxxvKIw3KS07i9SbE99OF5ePSzSzdgjVC+kQ7o1Zqvo5PKmqcYtfYgFndk3bJRTyvT6q7UjTu1Mw=='
+
+DATA = dict(accountName="jensen", credential="secret",
+            credentialType="PASSPHRASE", data=BLOB, signature=signature
+            )
+
+result = sharecli.service.verify(DATA)
+print result
+assert result.verified == True
+
+DATA = dict(accountName="jensen", credential="secret",
+            credentialType="PASSPHRASE", data=BLOB+'x', signature=signature
+            )
+
+result = sharecli.service.verify(DATA)
+print result
+assert result.verified == False
