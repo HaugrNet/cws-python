@@ -1,6 +1,7 @@
 from zeep import Client
 import hashlib
 import datetime
+import base64
 # Usage Examples
 
 # Connect to the two main webservices, system and share
@@ -24,7 +25,7 @@ def createUser(uid, pw, creds):
 syscli = Client('http://localhost:8080/cws/system?wsdl')
 sharecli = Client('http://localhost:8080/cws/share?wsdl')
 
-# Set an initial password for your administrator
+print "Set an initial password for your administrator"
 # We do this by sending an arbitrary initial authenticated request which
 # will set the so far unset password
 
@@ -39,14 +40,12 @@ print "Connection successful"
 assert result.trustees == []
 
 # By now the password is set, we can use it.
-# Next is a normal users account
+print "Next is creation of a normal users account"
 member_id = createUser(uid='pilz', pw='secret', creds=CRED)
-if not member_id:
-    member_id = "83b41bb6-8d0e-4182-84f1-16962241dcce"
 
 print "Member ID: %s" % member_id
 
-# Now we need to create a circle
+print "Now we need to create a circle"
 
 DATA = CRED.copy()
 DATA.update(dict(action="CREATE", circleId="",
@@ -56,21 +55,16 @@ DATA.update(dict(action="CREATE", circleId="",
 result = syscli.service.processCircle(DATA)
 if result.returnCode == "SUCCESS":
     circle_id = result.circleId
-else:
-    circle_id = "46830d65-37fd-4f01-a8e0-af88c9a9bf37"
 
 print "Circle ID: %s" % circle_id
 
-# Now we need a second user and add it to the same circle
+print "Now we need a second user and add it to the same circle"
 
 jensen_id = createUser(uid='jensen', pw='secret', creds=CRED)
 
-if not jensen_id:
-    jensen_id = '8d799805-b363-48dd-a2ea-c13d5d133aeb'
-
 print "Jensen ID: %s" % jensen_id
 
-# Now we add jensen to the circle
+print "Now we add jensen to the circle"
 # This time, we do it as the circle admin user, not the sysadmin
 DATA = dict(accountName="pilz", credential="secret",
             credentialType="PASSPHRASE", action="ADD", circleId=circle_id,
@@ -78,7 +72,7 @@ DATA = dict(accountName="pilz", credential="secret",
 result = syscli.service.processCircle(DATA)
 print result
 
-# Check the circle
+print "Check the circle"
 
 DATA = CRED.copy()
 DATA.update(dict(circleId=circle_id))
@@ -86,19 +80,34 @@ result = syscli.service.fetchCircles(CRED)
 
 print result
 
-# Let's put a file in / Note that we use sharecli now
+print "Let's put a file in / Note that we use sharecli now"
 
+print "Upload file"
 BLOB = open('test/plone.pdf', 'rb').read()  # Add a real blob here
+BLOB = base64.b64encode(BLOB)
 UUID = hashlib.md5(BLOB).hexdigest()
-# DATA = dict(accountName="pilz", credential="secret",
-#             credentialType="PASSPHRASE", action="ADD", circleId=circle_id,
-#             dataId='', typeName='', folderId='',
-#             dataName=UUID, data=BLOB
-#             )
-# result = sharecli.service.processData(DATA)
-# print result
 
-# Sign a document
+DATA = dict(accountName="pilz", credential="secret",
+            credentialType="PASSPHRASE", action="ADD", circleId=circle_id,
+            dataId='', typeName='data', folderId=None,
+            dataName=UUID, data=BLOB
+            )
+result = sharecli.service.processData(DATA)
+data_id = result.dataId
+print result
+
+print "Read the file again"
+DATA = dict(accountName="jensen", credential="secret",
+            credentialType="PASSPHRASE", circleId=circle_id,
+            dataId=data_id, folderId=None, pageSize=1, pageNumber=1
+            )
+result = sharecli.service.fetchData(DATA)
+data_out = base64.b64decode(result.data)
+open('out.pdf', 'wb').write(data_out)
+print result
+
+
+print "Sign a document"
 
 DATA = dict(accountName="pilz", credential="secret",
             credentialType="PASSPHRASE", data=BLOB,
@@ -107,16 +116,19 @@ DATA = dict(accountName="pilz", credential="secret",
 result = sharecli.service.sign(DATA)
 print result
 signature = result.signature
-signature = 'B0AEfotILqPDLS6TTjiRvaWH68H4rqbpeajv3nPxE8exknKSQbFPsT+juqIWS29JYZb+3V/zdV5zFcr7/0FFsdsmBJkOBLGr1VN4a9xiPabL6XoVgmyQzKrFy6FMnh7U4k9Rv7UfVv4lMoNQzGy0ZfgtOvqpQ/sVoUVySQXnsxddqvgtzGjmT1wOsgYVtbUb/93BDdEBtJWSQqJlXQC20WTmd8KnzDm/0fi5xq1a51gOh6Lhb9+WiWFK4oLGUcSq3AGTnDx0R1xxxvKIw3KS07i9SbE99OF5ePSzSzdgjVC+kQ7o1Zqvo5PKmqcYtfYgFndk3bJRTyvT6q7UjTu1Mw=='
+# signature = 'B0AEfotILqPDLS6TTjiRvaWH68H4rqbpeajv3nPxE8exknKSQbFPsT+juqIWS29JYZb+3V/zdV5zFcr7/0FFsdsmBJkOBLGr1VN4a9xiPabL6XoVgmyQzKrFy6FMnh7U4k9Rv7UfVv4lMoNQzGy0ZfgtOvqpQ/sVoUVySQXnsxddqvgtzGjmT1wOsgYVtbUb/93BDdEBtJWSQqJlXQC20WTmd8KnzDm/0fi5xq1a51gOh6Lhb9+WiWFK4oLGUcSq3AGTnDx0R1xxxvKIw3KS07i9SbE99OF5ePSzSzdgjVC+kQ7o1Zqvo5PKmqcYtfYgFndk3bJRTyvT6q7UjTu1Mw=='
 
 DATA = dict(accountName="jensen", credential="secret",
             credentialType="PASSPHRASE", data=BLOB, signature=signature
             )
 
 result = sharecli.service.verify(DATA)
+
 print result
+
 assert result.verified == True
 
+print "Verify the signature"
 DATA = dict(accountName="jensen", credential="secret",
             credentialType="PASSPHRASE", data=BLOB+'x', signature=signature
             )
